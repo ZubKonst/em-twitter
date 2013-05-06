@@ -137,7 +137,7 @@ module EventMachine
       protected
 
       def handle_stream(data)
-        @last_response << @decoder.decode(data)
+        @last_response << (@decoder ||= BaseDecoder.new).decode(data)
 
         if @last_response.complete?
           invoke_callback(@client.each_item_callback, @last_response.body)
@@ -148,17 +148,6 @@ module EventMachine
       def on_headers_complete(headers)
         @response_code  = @parser.status_code
         @headers        = headers
-
-        @decoder = BaseDecoder.new
-
-        # TODO: Complete gzip support
-        # detect gzip encoding and use a decoder for response bodies
-        # gzip needs to be detected with the Content-Encoding header
-        # @decoder = if gzip?
-        #   GzipDecoder.new
-        # else
-        #   BaseDecoder.new
-        # end
 
         # everything below here is error handling so return if we got a 200
         if @response_code.to_i == 200
@@ -301,6 +290,7 @@ module EventMachine
       def reset_connection
         @buffer               = BufferedTokenizer.new("\r", MAX_LINE_LENGTH)
         @parser               = Http::Parser.new(self)
+        @parser.on_body       = proc { |data| self.on_body(data) }
         @last_response        = Response.new
         @response_code        = 0
 
